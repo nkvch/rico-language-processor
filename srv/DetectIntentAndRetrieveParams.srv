@@ -1,0 +1,10 @@
+string user_input
+---
+bool matched
+int64 scenario_id
+string intent_name
+bool all_parameters_present
+string[] retrieved_param_names
+string[] retrieved_param_values
+string[] unretreived_param_names
+string fulfilling_question

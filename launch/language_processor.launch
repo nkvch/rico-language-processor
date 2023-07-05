@@ -1,0 +1,3 @@
+<launch>
+  <node pkg="language_processor" type="language_processor_node.py" name="language_processor_node" output="screen" />
+</launch>
