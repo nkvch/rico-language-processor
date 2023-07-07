@@ -3,8 +3,12 @@
 import json
 import os
 import subprocess
+import urllib2
 import jsonschema
+from stories.detect_intent import get_detect_intent_system_story
 from copy import deepcopy
+
+OPENAI_API_KEY = os.environ['OPENAI_API_KEY']
 
 response_schema_base = {
     "type": "object",
@@ -55,6 +59,7 @@ class OpenAIInterface:
             'detect_intent_during_task': os.path.normpath(os.path.join(
                 curr_file_dir, '..', 'python3', 'detect_intent_during_task.py')),
         }
+        self.api_url = 'https://api.openai.com/v1/chat/completions';
         # self.script_path = os.path.normpath(os.path.join(
         #     curr_file_dir, '..', 'python3', 'script.py'))
 
@@ -139,16 +144,37 @@ class OpenAIInterface:
         print "Intents list: ", intents_list_string
         print "Messages: ", messages
 
-        script_path = self.scripts_paths['detect_intent']
+        # script_path = self.scripts_paths['detect_intent']
 
-        messages_json = json.dumps(messages, ensure_ascii=False)        
+        # messages_json = json.dumps(messages, ensure_ascii=False)        
         
-        response = subprocess.check_output([
-            self.python3_path,
-            script_path,
-            intents_list_string,
-            messages_json
-        ])
+        # response = subprocess.check_output([
+        #     self.python3_path,
+        #     script_path,
+        #     intents_list_string,
+        #     messages_json
+        # ])
+
+        messages.insert(0, {"role": "system", "content": get_detect_intent_system_story(intents_list_string) })
+
+        print "Key: ", OPENAI_API_KEY
+
+        request = urllib2.Request(self.api_url, json.dumps({
+            "model": "gpt-3.5-turbo",
+            "messages": messages,
+            "max_tokens": 1000,
+            "temperature": 0,
+        }), headers={"Authorization": "Bearer " + OPENAI_API_KEY, "Content-Type": "application/json"})
+
+        completion = urllib2.urlopen(request).read()
+
+        print "Completion: ", completion
+
+        json_response = json.loads(completion)
+
+        print "JSON response: ", json_response
+
+        response = json_response['choices'][0]['message']['content']
 
         print("OpenAI response: ", response)
 
