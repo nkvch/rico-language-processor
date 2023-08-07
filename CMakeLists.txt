@@ -59,6 +59,8 @@ add_service_files(
   FILES
   DetectIntentAndRetrieveParams.srv
   InitiateConvBasedOnCtx.srv
+  GuessActor.srv
+  DetectIntentDuringTask.srv
 )
 
 ## Generate actions in the 'action' folder

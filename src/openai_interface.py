@@ -6,6 +6,9 @@ import subprocess
 import urllib2
 import jsonschema
 from stories.detect_intent import get_detect_intent_system_story
+from stories.initiate_conv import get_intiate_conv_system_story
+from stories.detect_intent_during_task import get_detect_intent_during_task_system_story
+from stories.guess_actor import get_guess_actor_system_story
 from copy import deepcopy
 
 OPENAI_API_KEY = os.environ['OPENAI_API_KEY']
@@ -36,8 +39,8 @@ response_schema_during_task = {
     "type": "object",
     "properties": {
         "name": {
-            "type": "string",
-            "enum": [], # these are created dynamically
+            "type": ["string", "null"],
+            "enum": [None], # these are created dynamically
         },
         "unexpected_question": {"type": "boolean"},
     },
@@ -78,7 +81,6 @@ class OpenAIInterface:
             response_schema['properties']['parameters']['properties'][param] = {
                 "type": ["string", "null"]}
             response_schema['properties']['parameters']['required'].append(param)
-            
 
         return response_schema
     
@@ -113,18 +115,28 @@ class OpenAIInterface:
             messages.append({'role': 'user', 'content': last_event.complement})
             history_of_events = history_of_events[:-1]
 
-        messages_json = json.dumps(messages, ensure_ascii=False)
         history_of_events_string = ''.join(history_of_events)
 
-        print history_of_events_string
-        print messages_json
+        history_length = len(history_of_events)
 
-        response = subprocess.check_output([
-            self.python3_path,
-            script_path,
-            history_of_events_string,
-            messages_json
-        ])
+        messages.insert(0, {"role": "system", "content": get_intiate_conv_system_story(history_of_events_string, history_length) })
+
+        request = urllib2.Request(self.api_url, json.dumps({
+            "model": "gpt-3.5-turbo",
+            "messages": messages,
+            "max_tokens": 1000,
+            "temperature": 0,
+        }), headers={"Authorization": "Bearer " + OPENAI_API_KEY, "Content-Type": "application/json"})
+
+        completion = urllib2.urlopen(request).read()
+
+        print "Completion: ", completion
+
+        json_response = json.loads(completion)
+
+        print "JSON response: ", json_response
+
+        response = json_response['choices'][0]['message']['content']
 
         print("OpenAI response: ", response)
 
@@ -132,32 +144,18 @@ class OpenAIInterface:
 
 
     def detect_intent_with_params(self, intents_with_params, messages):
-        # intents_list_string = '/n'.join([json.dumps(intent, ensure_ascii=False)
-        #                                 for intent in intents_with_params])
+        print intents_with_params
         intents_list_string = ''.join(map(lambda (idx, dic): """
         %i. %s
             %s""" % (idx + 1, dic['name'], ('parameters: ' + ','.join(dic['parameters'])) if len(dic['parameters']) else 'no parameters'), list(enumerate(
             intents_with_params
             ))
         ))
-        
+
         print "Intents list: ", intents_list_string
         print "Messages: ", messages
 
-        # script_path = self.scripts_paths['detect_intent']
-
-        # messages_json = json.dumps(messages, ensure_ascii=False)        
-        
-        # response = subprocess.check_output([
-        #     self.python3_path,
-        #     script_path,
-        #     intents_list_string,
-        #     messages_json
-        # ])
-
         messages.insert(0, {"role": "system", "content": get_detect_intent_system_story(intents_list_string) })
-
-        print "Key: ", OPENAI_API_KEY
 
         request = urllib2.Request(self.api_url, json.dumps({
             "model": "gpt-3.5-turbo",
@@ -229,13 +227,16 @@ class OpenAIInterface:
 
         return response_dict
     
-    def detect_intent_during_task(self, history_events, intents_with_description, last_user_message):
+    def detect_intent_during_task(self, history_events, intents_with_description, last_user_message, curr_task_params, curr_actor):
+        print intents_with_description
         intents_list_string = ''.join(map(lambda (idx, dic): """
         %i. %s
-            %s""" % (idx + 1, dic['name'], ('parameters: ' + ','.join(dic['description'])) if len(dic['description']) else 'no description'), list(enumerate(
+            %s""" % (idx + 1, dic['name'], ('description: ' + dic['description']) if len(dic['description']) else 'no description'), list(enumerate(
             intents_with_description
             ))
         ))
+
+        curr_task_params_string = ', '.join(curr_task_params)
 
         history_of_events = []
 
@@ -254,15 +255,24 @@ class OpenAIInterface:
         print "History events: ", history_events_string
         print "Last user message: ", last_user_message
 
-        script_path = self.scripts_paths['detect_intent_during_task']
+        request = urllib2.Request(self.api_url, json.dumps({
+            "model": "gpt-3.5-turbo",
+            "messages": [
+                {"role": "system", "content": get_detect_intent_during_task_system_story(history_events_string, intents_list_string, last_user_message, curr_task_params_string, curr_actor) }
+            ],
+            "max_tokens": 1000,
+            "temperature": 0,
+        }), headers={"Authorization": "Bearer " + OPENAI_API_KEY, "Content-Type": "application/json"})
 
-        response = subprocess.check_output([
-            self.python3_path,
-            script_path,
-            history_events_string,
-            intents_list_string,
-            last_user_message
-        ])
+        completion = urllib2.urlopen(request).read()
+
+        print "Completion: ", completion
+
+        json_response = json.loads(completion)
+
+        print "JSON response: ", json_response
+
+        response = json_response['choices'][0]['message']['content']
 
         print("OpenAI response: ", response)
 
@@ -294,5 +304,53 @@ class OpenAIInterface:
 
         return response_dict
 
+    def guess_actor(self, history_events, last_user_message):
+        history_of_events = []
 
-    
+        for idx, event in enumerate(history_events):
+            history_of_events.append("""
+            %i.
+            actor: %s
+            action: %s
+            complement: %s
+            description: %s
+            """ % (idx + 1, event.actor, event.action, event.complement, event.description if event.description else ''))
+
+        history_events_string = ''.join(history_of_events)
+
+        print "History events: ", history_events_string
+        print "Last user message: ", last_user_message
+
+        number_of_events = len(history_events)
+
+        request = urllib2.Request(self.api_url, json.dumps({
+            "model": "gpt-3.5-turbo",
+            "messages": [
+                {"role": "system", "content": get_guess_actor_system_story(history_events_string, number_of_events) },
+                {"role": "user", "content": last_user_message }
+            ],
+            "max_tokens": 1000,
+            "temperature": 0,
+        }), headers={"Authorization": "Bearer " + OPENAI_API_KEY, "Content-Type": "application/json"})
+
+        completion = urllib2.urlopen(request).read()
+
+        print "Completion: ", completion
+
+        json_response = json.loads(completion)
+
+        print "JSON response: ", json_response
+
+        response = json_response['choices'][0]['message']['content']
+
+        print("OpenAI response: ", response)
+
+        lowercased_response = response.lower()
+
+        if 'keeper' in lowercased_response:
+            return 'keeper'
+        
+        if 'senior' in lowercased_response:
+            return 'senior'
+        
+        return 'unknown'

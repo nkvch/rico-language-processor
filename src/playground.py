@@ -5,26 +5,6 @@ import os
 from google.cloud import speech, texttospeech as tts
 from openai_interface import OpenAIInterface
 
-openai_key = os.environ['OPENAI_API_KEY']
-
-openai_interface = OpenAIInterface(openai_key)
-
-response = openai_interface.detect_intent_with_params(
-    [{'name': 'jedź do', 'parameters': ['miejsce']},
-     {'name': 'obróć się', 'parameters': []},
-     {'name': 'podaj przedmiot', 'parameters': ['przedmiot']},
-     {'name': 'podaj herbatę', 'parameters': ['przedmiot', 'czarna_czy_zielona']},
-     {'name': 'podaj kawę', 'parameters': ['przedmiot', 'czarna_czy_biala']},
-     {'name': 'odebrałem', 'parameters': []},
-     {'name': 'potwierdzam', 'parameters': []},
-     {'name': 'podałem', 'parameters': []},
-     {'name': 'co wiezesz', 'parameters': []},
-     {'name': 'obróć się', 'parameters': []}],
-     "podaj kaszę"
-)
-
-print(response)
-
 # cred_file_incare_dialog = os.environ['GOOGLE_CONVERSATIONAL_DIALOGFLOW']
 
 # # Instantiates a client
@@ -53,3 +33,46 @@ print(response)
 #         print "Generated speech saved to {}".format(filename)
 
 # text_to_wav(voice_name, "jedź do kuchni")
+
+import jsonschema
+
+# Your updated schema
+response_schema_during_task = {
+    "type": "object",
+    "properties": {
+        "name": {
+            # "type": ["string", "null"],  # Allow string or null
+            "enum": ["fuz", "bar", None]  # Allow "null" or None
+        },
+        "unexpected_question": {"type": "boolean"},
+    },
+    "required": ["name", "unexpected_question"],
+    "additionalProperties": False
+}
+
+# Your JSON response with "name" as null (using the string "null")
+response_null = {
+    "name": "null",
+    "unexpected_question": True
+}
+
+# Your JSON response with "name" as None (Python None object)
+response_none = {
+    "name": None,
+    "unexpected_question": True
+}
+
+# Validate the responses against the schema
+try:
+    jsonschema.validate(response_null, response_schema_during_task)
+    print("Validation successful. The response with null 'name' is valid.")
+except jsonschema.exceptions.ValidationError as e:
+    print("Validation failed. The response with null 'name' is not valid.")
+    print(e.message)
+
+try:
+    jsonschema.validate(response_none, response_schema_during_task)
+    print("Validation successful. The response with 'None' 'name' is valid.")
+except jsonschema.exceptions.ValidationError as e:
+    print("Validation failed. The response with 'None' 'name' is not valid.")
+    print(e.message)
