@@ -3,6 +3,7 @@
 
 import rospy
 import tiago_msgs.msg
+import std_msgs.msg
 import os
 import actionlib
 from std_msgs.msg import String, Bool
@@ -68,9 +69,6 @@ def main():
 
     rico_says_client = actionlib.SimpleActionClient(
             'rico_says', tiago_msgs.msg.SaySentenceAction)
-
-
-
 
     # conversation_state = ConversationState()
 
@@ -150,6 +148,39 @@ def main():
             ''
         ))
 
+        detect_intent_with_params(s_i_with_params_openai, s_i_with_params_dict, messages)
+
+
+    def process_last_intent_from_history():
+        # same as process_intent, but uses last message from history instead of user input, and doesn't publish to /context/push, and don't use guess_actor
+        scenarios_intents_with_params = get_scenarios_intents_with_params().scenarios_intents_with_params
+
+        s_i_with_params_dict = dict(list(map(lambda siwp: (siwp.intent_name, {
+            'scenario_id': siwp.scenario_id, 'name': siwp.intent_name, 'parameters': siwp.params}), scenarios_intents_with_params)))
+        
+        s_i_with_params_openai = deepcopy(s_i_with_params_dict.values())
+
+        for s_i_with_params in s_i_with_params_openai:
+            del s_i_with_params['scenario_id']
+
+        rico_history_events = get_context().events
+
+        messages = []
+
+        for event in rico_history_events:
+            if event.action == 'say' and event.actor == 'Rico':
+                messages.append({'role': 'assistant', 'content': event.complement})
+            if event.action == 'say' and event.actor != 'Rico':
+                messages.append({'role': 'user', 'content': event.complement})
+
+        last_message = messages[-1]
+
+        last_message_actor = 'user' if last_message['role'] == 'user' else 'assistant'
+
+        detect_intent_with_params(s_i_with_params_openai, s_i_with_params_dict, messages)
+
+        
+    def detect_intent_with_params(s_i_with_params_openai, s_i_with_params_dict, messages):
         response = openai_interface.detect_intent_with_params(
             s_i_with_params_openai, messages)
 
@@ -177,7 +208,7 @@ def main():
                     retrieved_param_values.append(value)
                 else:
                     unretrieved_param_names.append(key)
-        
+
         fulfilling_question = response['fulfilling_question'] if matched and not all_parameters_present else ''
 
         if not matched:
@@ -185,7 +216,6 @@ def main():
 
         if not all_parameters_present:
             return speakRequest(fulfilling_question)
-    
 
         cmd = tiago_msgs.msg.Command()
         cmd.query_text = ''
@@ -198,17 +228,6 @@ def main():
         cmd.confidence = 1.0
         cmd.response_text = u'Okej'
         pub_cmd.publish(cmd)
-
-        # return DetectIntentAndRetrieveParamsResponse(
-        #     matched,
-        #     scenario_id,
-        #     intent_name,
-        #     all_parameters_present,
-        #     retrieved_param_names,
-        #     retrieved_param_values,
-        #     unretrieved_param_names,
-        #     fulfilling_question,
-        # )
 
 
     def process_intent_during_task(text):
@@ -260,17 +279,17 @@ def main():
             response = encode_dict(response)
 
         matched = got_dict_response and response['name'] in in_task_intents_dict
-            
+
         intent_name = response['name'] if got_dict_response and matched else ''
         has_unexpected_question = response['unexpected_question'] if got_dict_response and not matched else ''
 
         if not got_dict_response or not matched and not has_unexpected_question:
             return speakRequest('I don\'t understand. Could you repeat?')
-        
+
         cmd = tiago_msgs.msg.Command()
 
         cmd.query_text = ''
-        
+
         if matched:
             cmd.intent_name = unicode(intent_name, 'utf-8')
         elif has_unexpected_question:
@@ -278,7 +297,6 @@ def main():
 
         if has_unexpected_question:
             cmd.param_names.append('unexpected_question')
-
             cmd.param_values.append(unicode(response['unexpected_question'], 'utf-8'))
 
         cmd.confidence = 1.0
@@ -306,6 +324,9 @@ def main():
     
     rospy.Subscriber(
         '/rico_hear', String, hear_callback, queue_size=1)
+    
+    rospy.Subscriber(
+        '/rico_process_last_intent_from_history', std_msgs.msg.Empty, lambda _: process_last_intent_from_history(), queue_size=1)
 
     rospy.spin()
 

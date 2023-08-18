@@ -42,7 +42,9 @@ response_schema_during_task = {
             "type": ["string", "null"],
             "enum": [None], # these are created dynamically
         },
-        "unexpected_question": {"type": "boolean"},
+        "unexpected_question": {
+            "type": ["string", "null"],
+        }
     },
     "required": ["name", "unexpected_question"],
     "additionalProperties": False
@@ -121,6 +123,8 @@ class OpenAIInterface:
 
         messages.insert(0, {"role": "system", "content": get_intiate_conv_system_story(history_of_events_string, history_length) })
 
+        print 'REQUEST', messages
+
         request = urllib2.Request(self.api_url, json.dumps({
             "model": "gpt-3.5-turbo",
             "messages": messages,
@@ -156,6 +160,8 @@ class OpenAIInterface:
         print "Messages: ", messages
 
         messages.insert(0, {"role": "system", "content": get_detect_intent_system_story(intents_list_string) })
+
+        print 'REQUEST', messages
 
         request = urllib2.Request(self.api_url, json.dumps({
             "model": "gpt-3.5-turbo",
