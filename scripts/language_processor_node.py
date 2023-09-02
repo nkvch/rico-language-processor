@@ -23,39 +23,12 @@ import json
 def encode_dict(d):
     return {key.encode('utf-8'): encode_dict(value) if isinstance(value, dict) else value.encode('utf-8') if isinstance(value, unicode) else value for key, value in d.items()}
 
-# class ConversationState:
-#     def __init__(self):
-#         self.conversation_state = 'idle'
-#         self.messages = []
-
-#     def add_message(self, message):
-#         self.messages.append(message)
-
-#     def openai_response_callback(self, response):
-#         matched = response is not None
-#         all_parameters_present = response['all_parameters_present'] if matched else False
-#         fulfilling_question = response['fulfilling_question'] if matched and not all_parameters_present else None
-
-#         if fulfilling_question is not None:
-#             self.conversation_state = 'parameter_prompting'
-#             self.messages.append(fulfilling_question)
-#         else:
-#             self.messages.append('Okay!')
-#             self.conversation_state = 'executing'
-
-
-#     def is_conversation_idle(self):
-#         return self.conversation_state == 'idle'
-
-#     def is_parameter_prompting(self):
-#         return self.conversation_state == 'parameter_prompting'
-
 
 def main():
     rospy.init_node('language_processor', anonymous=True)
     get_scenarios_intents_with_params = rospy.ServiceProxy(
         'get_scenarios_intents_with_params', GetScenariosIntentsWithParams)
-    get_context = rospy.ServiceProxy('/context/get', GetContext)
+    get_latest_context = rospy.ServiceProxy('/context/get_after_last_scenario', GetContext)
     get_scenario_inputs = rospy.ServiceProxy(
         'get_scenario_inputs', GetScenarioInputs)
     get_current_scenario_id = rospy.ServiceProxy(
@@ -93,7 +66,7 @@ def main():
 
 
     def initiate_conv_based_on_ctx(req):
-        rico_history_events = get_context().events
+        rico_history_events = get_latest_context().events
 
         filtered_events = []
         for event in rico_history_events:
@@ -105,7 +78,7 @@ def main():
         return InitiateConvBasedOnCtxResponse(response)
     
     def guess_actor(text):
-        rico_history_events = get_context().events
+        rico_history_events = get_latest_context().events
 
         filtered_events = []
         for event in rico_history_events:
@@ -117,6 +90,14 @@ def main():
         return actor
 
     def process_intent(text):
+        last_message_actor = guess_actor(text)
+        pub_context.publish(HistoryEvent(
+            last_message_actor,
+            'say',
+            '"%s"' % text,
+            ''
+        ))
+
         scenarios_intents_with_params = get_scenarios_intents_with_params().scenarios_intents_with_params
 
         s_i_with_params_dict = dict(list(map(lambda siwp: (siwp.intent_name, {
@@ -127,28 +108,16 @@ def main():
         for s_i_with_params in s_i_with_params_openai:
             del s_i_with_params['scenario_id']
 
-        rico_history_events = get_context().events
+        rico_history_events = get_latest_context().events
 
-        messages = []
+        conversation_events = []
 
         for event in rico_history_events:
-            if event.action == 'say' and event.actor == 'Rico':
-                messages.append({'role': 'assistant', 'content': event.complement})
-            if event.action == 'say' and event.actor != 'Rico':
-                messages.append({'role': 'user', 'content': event.complement})
+            if event.action == 'say':
+                conversation_events.append(event)
+                conversation_events.append(event)
 
-        messages.append({'role': 'user', 'content': text})
-
-        last_message_actor = guess_actor(text)
-
-        pub_context.publish(HistoryEvent(
-            last_message_actor,
-            'say',
-            '"%s"' % text,
-            ''
-        ))
-
-        detect_intent_with_params(s_i_with_params_openai, s_i_with_params_dict, messages)
+        detect_intent_with_params(s_i_with_params_openai, s_i_with_params_dict, conversation_events)
 
 
     def process_last_intent_from_history():
@@ -163,26 +132,25 @@ def main():
         for s_i_with_params in s_i_with_params_openai:
             del s_i_with_params['scenario_id']
 
-        rico_history_events = get_context().events
+        rico_history_events = get_latest_context().events
 
-        messages = []
+        conversation_events = []
 
         for event in rico_history_events:
-            if event.action == 'say' and event.actor == 'Rico':
-                messages.append({'role': 'assistant', 'content': event.complement})
-            if event.action == 'say' and event.actor != 'Rico':
-                messages.append({'role': 'user', 'content': event.complement})
+            if event.action == 'say':
+                conversation_events.append(event)
 
-        last_message = messages[-1]
-
-        last_message_actor = 'user' if last_message['role'] == 'user' else 'assistant'
-
-        detect_intent_with_params(s_i_with_params_openai, s_i_with_params_dict, messages)
+        detect_intent_with_params(s_i_with_params_openai, s_i_with_params_dict, conversation_events)
 
         
-    def detect_intent_with_params(s_i_with_params_openai, s_i_with_params_dict, messages):
+    def detect_intent_with_params(s_i_with_params_openai, s_i_with_params_dict, conversation_events):
+        conversation_history_string = ''
+
+        for event in conversation_events:
+            conversation_history_string += "%s: %s \n" % ('Rico' if event.actor == 'Rico' else 'User', event.complement)
+
         response = openai_interface.detect_intent_with_params(
-            s_i_with_params_openai, messages)
+            s_i_with_params_openai, conversation_history_string)
 
         print response
 
@@ -191,12 +159,16 @@ def main():
         print 's_i_with_params_dict', s_i_with_params_dict
 
         if matched:
-            response = encode_dict(response)
+            try:
+                response = encode_dict(response)
+            except:
+                matched = False
+
+        if matched:
             detected_scenario_intent = s_i_with_params_dict[response['name']]
 
         scenario_id = detected_scenario_intent['scenario_id'] if matched else -1
         intent_name = detected_scenario_intent['name'] if matched else ''
-        all_parameters_present = response['all_parameters_present'] if matched else False
         retrieved_param_names = []
         retrieved_param_values = []
         unretrieved_param_names = []
@@ -209,7 +181,12 @@ def main():
                 else:
                     unretrieved_param_names.append(key)
 
-        fulfilling_question = response['fulfilling_question'] if matched and not all_parameters_present else ''
+        all_parameters_present = len(unretrieved_param_names) == 0 if matched else False
+
+        if matched and not all_parameters_present and 'fulfilling_question' not in response:
+            fulfilling_question = openai_interface.fallback_get_fulfilling_question(intent_name, unretrieved_param_names)
+        else:
+            fulfilling_question = response['fulfilling_question'] if matched and not all_parameters_present else ''
 
         if not matched:
             return speakRequest('I don\'t understand. Could you repeat?')
@@ -253,7 +230,7 @@ def main():
 
         events = []
 
-        rico_history_events = get_context().events
+        rico_history_events = get_latest_context().events
 
         for event in rico_history_events:
             if event.actor != 'system':
@@ -273,41 +250,37 @@ def main():
 
         print response
 
-        got_dict_response = response is not None
+        matched = response is not None
 
-        if got_dict_response:
-            response = encode_dict(response)
+        if not matched:
+            detect_unexpected_question_resp = openai_interface.detect_unexpected_question(events, last_message_actor, text)
 
-        matched = got_dict_response and response['name'] in in_task_intents_dict
+            if detect_unexpected_question_resp is None:
+                return speakRequest('I don\'t understand. Could you repeat?')
+            elif isinstance(detect_unexpected_question_resp, dict) and 'answer' in detect_unexpected_question_resp:
+                return speakRequest(detect_unexpected_question_resp['answer'])
+            elif isinstance(detect_unexpected_question_resp, dict) and 'new_parameter_name' in detect_unexpected_question_resp:
+                print 'detect_unexpected_question_resp', detect_unexpected_question_resp
+                cmd = tiago_msgs.msg.Command()
+                cmd.query_text = ''
+                cmd.intent_name = unicode('unexpected_question', 'utf-8')
+                cmd.param_names.append(unicode('unexpected_question', 'utf-8'))
+                cmd.param_values.append(detect_unexpected_question_resp['new_parameter_name'])
+                cmd.confidence = 1.0
+                cmd.response_text = u''
+                pub_filtered_cmd.publish(cmd)
+                return
 
-        intent_name = response['name'] if got_dict_response and matched else ''
-        has_unexpected_question = response['unexpected_question'] if got_dict_response and not matched else ''
+        else:
+            cmd = tiago_msgs.msg.Command()
 
-        if not got_dict_response or not matched and not has_unexpected_question:
-            return speakRequest('I don\'t understand. Could you repeat?')
+            cmd.query_text = ''
 
-        cmd = tiago_msgs.msg.Command()
+            cmd.intent_name = response
 
-        cmd.query_text = ''
-
-        if matched:
-            cmd.intent_name = unicode(intent_name, 'utf-8')
-        elif has_unexpected_question:
-            cmd.intent_name = unicode('unexpected_question', 'utf-8')
-
-        if has_unexpected_question:
-            cmd.param_names.append('unexpected_question')
-            cmd.param_values.append(unicode(response['unexpected_question'], 'utf-8'))
-
-        cmd.confidence = 1.0
-        cmd.response_text = u''
-        pub_filtered_cmd.publish(cmd)
-
-        # return DetectIntentDuringTaskResponse(
-        #     matched,
-        #     intent_name,
-        #     has_unexpected_question,
-        # )
+            cmd.confidence = 1.0
+            cmd.response_text = u''
+            pub_filtered_cmd.publish(cmd)
 
 
     # rospy.Service('detect_intent_and_retrieve_params',

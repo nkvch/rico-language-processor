@@ -9,6 +9,8 @@ from stories.detect_intent import get_detect_intent_system_story
 from stories.initiate_conv import get_intiate_conv_system_story
 from stories.detect_intent_during_task import get_detect_intent_during_task_system_story
 from stories.guess_actor import get_guess_actor_system_story
+from stories.fallback_get_fulfilling_question import fallback_get_fulfulling_question_system_story
+from stories.detect_unexpected_question import detect_unexpected_question_system_story
 from copy import deepcopy
 
 OPENAI_API_KEY = os.environ['OPENAI_API_KEY']
@@ -28,10 +30,9 @@ response_schema_base = {
             "required": [],
             "additionalProperties": False
         },
-        "all_parameters_present": {"type": "boolean"},
         "fulfilling_question": {"type": "string"},
     },
-    "required": ["name", "parameters", "all_parameters_present"],
+    "required": ["name", "parameters"],
     "additionalProperties": False
 }
 
@@ -50,6 +51,22 @@ response_schema_during_task = {
     "additionalProperties": False
 }
 
+# can be one of:
+# 1. null
+# 2. {
+#     "answer": string
+# }
+# 3. {
+#     "new_parameter_name": string
+# }
+response_schema_detect_unexpected_question = {
+    "type": ["object", "null"],
+    "properties": {
+        "answer": {"type": "string"},
+        "new_parameter_name": {"type": "string"}
+    },
+    "additionalProperties": False
+}
 
 class OpenAIInterface:
     def __init__(self):
@@ -126,10 +143,13 @@ class OpenAIInterface:
         print 'REQUEST', messages
 
         request = urllib2.Request(self.api_url, json.dumps({
-            "model": "gpt-3.5-turbo",
+            "model": "gpt-4",
             "messages": messages,
             "max_tokens": 1000,
             "temperature": 0,
+            "top_p": 1,
+            "frequency_penalty": 0,
+            "presence_penalty": 0
         }), headers={"Authorization": "Bearer " + OPENAI_API_KEY, "Content-Type": "application/json"})
 
         completion = urllib2.urlopen(request).read()
@@ -147,7 +167,7 @@ class OpenAIInterface:
         return response
 
 
-    def detect_intent_with_params(self, intents_with_params, messages):
+    def detect_intent_with_params(self, intents_with_params, conv_history_string):
         print intents_with_params
         intents_list_string = ''.join(map(lambda (idx, dic): """
         %i. %s
@@ -156,18 +176,21 @@ class OpenAIInterface:
             ))
         ))
 
-        print "Intents list: ", intents_list_string
-        print "Messages: ", messages
-
-        messages.insert(0, {"role": "system", "content": get_detect_intent_system_story(intents_list_string) })
+        messages = [{
+            "role": "system",
+            "content": get_detect_intent_system_story(intents_list_string, conv_history_string)
+        }]
 
         print 'REQUEST', messages
 
         request = urllib2.Request(self.api_url, json.dumps({
-            "model": "gpt-3.5-turbo",
+            "model": "gpt-4",
             "messages": messages,
             "max_tokens": 1000,
             "temperature": 0,
+            "top_p": 1,
+            "frequency_penalty": 0,
+            "presence_penalty": 0
         }), headers={"Authorization": "Bearer " + OPENAI_API_KEY, "Content-Type": "application/json"})
 
         completion = urllib2.urlopen(request).read()
@@ -232,7 +255,7 @@ class OpenAIInterface:
             response_dict = None
 
         return response_dict
-    
+
     def detect_intent_during_task(self, history_events, intents_with_description, last_user_message, curr_task_params, curr_actor):
         print intents_with_description
         intents_list_string = ''.join(map(lambda (idx, dic): """
@@ -262,12 +285,95 @@ class OpenAIInterface:
         print "Last user message: ", last_user_message
 
         request = urllib2.Request(self.api_url, json.dumps({
-            "model": "gpt-3.5-turbo",
+            "model": "gpt-4",
             "messages": [
                 {"role": "system", "content": get_detect_intent_during_task_system_story(history_events_string, intents_list_string, last_user_message, curr_task_params_string, curr_actor) }
             ],
             "max_tokens": 1000,
             "temperature": 0,
+            "top_p": 1,
+            "frequency_penalty": 0,
+            "presence_penalty": 0
+        }), headers={"Authorization": "Bearer " + OPENAI_API_KEY, "Content-Type": "application/json"})
+
+        completion = urllib2.urlopen(request).read()
+
+        print "Completion: ", completion
+
+        json_response = json.loads(completion)
+
+        print "JSON response: ", json_response
+
+        response = json_response['choices'][0]['message']['content']
+
+        print("OpenAI response: ", response)
+
+        intents_names = list(map(lambda intent: intent['name'], intents_with_description))
+
+        if response in intents_names:
+            return response
+        else:
+            return None
+
+        # response_dict = None
+
+        # try:
+        #     # convert from unicode to normal (\u0119 -> ę)
+        #     response = json.dumps(json.loads(response), ensure_ascii=False)
+
+        #     print(response)
+
+        #     response_dict = json.loads(response)
+            
+        #     if isinstance(response_dict, dict):
+        #         print "Validating response..."
+        #         response_schema = self.prepare_response_schema_during_task(intents_with_description)
+        #         print "Response schema: ", response_schema
+        #         try:
+        #             jsonschema.validate(response_dict, response_schema)
+        #         except Exception as e:
+        #             raise e
+        #         else:
+        #             # If validation succeeds, do something with the original dictionary
+        #             print("Valid dictionary: ", response_dict)
+        # except:
+        #     print("OpenAI response is not a valid JSON. Falling back to empty response.")
+        #     print(response)
+        #     response_dict = None
+
+        # return response_dict
+    
+    def detect_unexpected_question(self, history_events, curr_actor, last_user_message):
+        history_of_events = []
+
+        for idx, event in enumerate(history_events):
+            history_of_events.append("""
+            %i.
+            actor: %s
+            action: %s
+            complement: %s
+            description: %s
+            """ % (idx + 1, event.actor, event.action, event.complement, event.description if event.description else ''))
+
+        history_events_string = ''.join(history_of_events)
+
+        print "History events: ", history_events_string
+
+        messages = [
+            {"role": "system", "content": detect_unexpected_question_system_story(history_events_string, curr_actor) },
+            {"role": "user", "content": last_user_message }
+        ]
+
+        print 'REQUEST', messages
+
+        request = urllib2.Request(self.api_url, json.dumps({
+            "model": "gpt-4",
+            "messages": messages,
+            "max_tokens": 1000,
+            "temperature": 0,
+            "top_p": 1,
+            "frequency_penalty": 0,
+            "presence_penalty": 0
         }), headers={"Authorization": "Bearer " + OPENAI_API_KEY, "Content-Type": "application/json"})
 
         completion = urllib2.urlopen(request).read()
@@ -291,18 +397,18 @@ class OpenAIInterface:
             print(response)
 
             response_dict = json.loads(response)
-            
-            if isinstance(response_dict, dict):
-                print "Validating response..."
-                response_schema = self.prepare_response_schema_during_task(intents_with_description)
-                print "Response schema: ", response_schema
-                try:
-                    jsonschema.validate(response_dict, response_schema)
-                except Exception as e:
-                    raise e
-                else:
-                    # If validation succeeds, do something with the original dictionary
-                    print("Valid dictionary: ", response_dict)
+
+            print "Validating response..."
+            response_schema = response_schema_detect_unexpected_question
+            print "Response schema: ", response_schema
+            try:
+                jsonschema.validate(response_dict, response_schema)
+            except Exception as e:
+                raise e
+            else:
+                # If validation succeeds, do something with the original dictionary
+                print("Valid dictionary: ", response_dict)
+
         except:
             print("OpenAI response is not a valid JSON. Falling back to empty response.")
             print(response)
@@ -337,6 +443,9 @@ class OpenAIInterface:
             ],
             "max_tokens": 1000,
             "temperature": 0,
+            "top_p": 1,
+            "frequency_penalty": 0,
+            "presence_penalty": 0
         }), headers={"Authorization": "Bearer " + OPENAI_API_KEY, "Content-Type": "application/json"})
 
         completion = urllib2.urlopen(request).read()
@@ -360,3 +469,36 @@ class OpenAIInterface:
             return 'senior'
         
         return 'unknown'
+
+    def fallback_get_fulfilling_question(self, curr_intent, unretrieved_parameters):
+        unretrieved_parameters_string = '"' + '", "'.join(unretrieved_parameters) + '"'
+
+        messages = [
+            {"role": "system", "content": fallback_get_fulfulling_question_system_story(curr_intent, unretrieved_parameters_string) }
+        ]
+
+        print 'REQUEST', messages
+
+        request = urllib2.Request(self.api_url, json.dumps({
+            "model": "gpt-3.5-turbo",
+            "messages": messages,
+            "max_tokens": 1000,
+            "temperature": 0,
+            "top_p": 1,
+            "frequency_penalty": 0,
+            "presence_penalty": 0
+        }), headers={"Authorization": "Bearer " + OPENAI_API_KEY, "Content-Type": "application/json"})
+
+        completion = urllib2.urlopen(request).read()
+
+        print "Completion: ", completion
+
+        json_response = json.loads(completion)
+
+        print "JSON response: ", json_response
+
+        response = json_response['choices'][0]['message']['content']
+
+        print("OpenAI response: ", response)
+
+        return response
