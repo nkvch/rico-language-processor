@@ -143,7 +143,7 @@ class OpenAIInterface:
         print 'REQUEST', messages
 
         request = urllib2.Request(self.api_url, json.dumps({
-            "model": "gpt-4",
+            "model": "gpt-4-1106-preview",
             "messages": messages,
             "max_tokens": 1000,
             "temperature": 0,
@@ -184,7 +184,7 @@ class OpenAIInterface:
         print 'REQUEST', messages
 
         request = urllib2.Request(self.api_url, json.dumps({
-            "model": "gpt-4",
+            "model": "gpt-4-1106-preview",
             "messages": messages,
             "max_tokens": 1000,
             "temperature": 0,
@@ -285,7 +285,7 @@ class OpenAIInterface:
         print "Last user message: ", last_user_message
 
         request = urllib2.Request(self.api_url, json.dumps({
-            "model": "gpt-4",
+            "model": "gpt-4-1106-preview",
             "messages": [
                 {"role": "system", "content": get_detect_intent_during_task_system_story(history_events_string, intents_list_string, last_user_message, curr_task_params_string, curr_actor) }
             ],
@@ -314,34 +314,6 @@ class OpenAIInterface:
             return response
         else:
             return None
-
-        # response_dict = None
-
-        # try:
-        #     # convert from unicode to normal (\u0119 -> ę)
-        #     response = json.dumps(json.loads(response), ensure_ascii=False)
-
-        #     print(response)
-
-        #     response_dict = json.loads(response)
-            
-        #     if isinstance(response_dict, dict):
-        #         print "Validating response..."
-        #         response_schema = self.prepare_response_schema_during_task(intents_with_description)
-        #         print "Response schema: ", response_schema
-        #         try:
-        #             jsonschema.validate(response_dict, response_schema)
-        #         except Exception as e:
-        #             raise e
-        #         else:
-        #             # If validation succeeds, do something with the original dictionary
-        #             print("Valid dictionary: ", response_dict)
-        # except:
-        #     print("OpenAI response is not a valid JSON. Falling back to empty response.")
-        #     print(response)
-        #     response_dict = None
-
-        # return response_dict
     
     def detect_unexpected_question(self, history_events, curr_actor, last_user_message):
         history_of_events = []
@@ -367,7 +339,7 @@ class OpenAIInterface:
         print 'REQUEST', messages
 
         request = urllib2.Request(self.api_url, json.dumps({
-            "model": "gpt-4",
+            "model": "gpt-4-1106-preview",
             "messages": messages,
             "max_tokens": 1000,
             "temperature": 0,
