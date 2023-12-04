@@ -49,7 +49,8 @@ def main():
 
     def speakRequest(text):
         goal = tiago_msgs.msg.SaySentenceGoal()
-        goal.sentence = u'niekorzystne warunki pogodowe ' + text
+        # goal.sentence = u'niekorzystne warunki pogodowe ' + text
+        goal.sentence = u'' + text
 
         rico_says_client.send_goal(goal)
         rico_says_client.wait_for_result()

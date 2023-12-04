@@ -185,6 +185,7 @@ class OpenAIInterface:
 
         request = urllib2.Request(self.api_url, json.dumps({
             "model": "gpt-4-1106-preview",
+            "response_format": { "type": "json_object" },
             "messages": messages,
             "max_tokens": 1000,
             "temperature": 0,
@@ -340,6 +341,7 @@ class OpenAIInterface:
 
         request = urllib2.Request(self.api_url, json.dumps({
             "model": "gpt-4-1106-preview",
+            "response_format": { "type": "json_object" },
             "messages": messages,
             "max_tokens": 1000,
             "temperature": 0,
