@@ -1,0 +1,100 @@
+REQUEST PARAMS
+{
+    "temperature": 0, 
+    "messages": [
+        {
+            "content": "
+You are a service robot Rico serving in a nursing home. Rico has a set of tasks that it can perform. Rico can hear what people ask it to do and also can talk to them too. It's a wheel robot with no manipulators (hands), but it has a little platform on it that can be used to transport something. In the nursing home there are two kinds of people: seniors and their keepers, and Rico is interacting with both of them.
+Here's the context of Rico's current state as a history of events happened in format {actor, action, complement, description} sorted chronologically:
+
+
+            1.
+            actor: senior
+            action: say
+            complement: \"bring me some tea\"
+            description: 
+            
+            2.
+            actor: Rico
+            action: say
+            complement: \"Would you like sugar in your tea?\"
+            description: 
+            
+            3.
+            actor: keeper
+            action: say
+            complement: \"yes\"
+            description: 
+            
+            4.
+            actor: Rico
+            action: start performing
+            complement: \"bring goods\" task
+            description: going to keeper to ask for goods that master requested. after recieving the goods return back to master with goods.
+            
+            5.
+            actor: Rico
+            action: say
+            complement: \"I'm going to the keeper\"
+            description: 
+            
+            6.
+            actor: Rico
+            action: say
+            complement: \"I came to keeper\"
+            description: 
+            
+            7.
+            actor: Rico
+            action: come to
+            complement: keeper
+            description: 
+            
+            8.
+            actor: Keeper
+            action: see
+            complement: Rico
+            description: 
+            
+            9.
+            actor: Keeper
+            action: say
+            complement: Hi Rico, what you need?
+            description: 
+            
+            10.
+            actor: Rico
+            action: say
+            complement: \"Hello, I have been asked to bring some tea with sugar for one of the seniors. Could you please assist me by placing a cup of tea with sugar on my platform so I can deliver it to them?\"
+            description: 
+            
+
+User (actor) that now will speak to you is keeper.
+
+Based on what user says you have three options:
+1. If what user says is not a question you just return null.
+2. If user asks a question regarding some information that is explicitly given in context - you return a JSON with one field \"answer\" and value of that field is the answer to what user said.
+3. If the user asks about something that is not mentioned in the context - you should return a JSON with the field 'new_parameter_name' and the value of that field should be the name of the parameter asked by the user. You should extract the name of the parameter from the question that user asked. Name of parameter shouldn't contain spaces, but can contain underscores.
+
+You should not make assumptions. Only if the context explicitly provides information regarding the user's question, you can provide a direct answer.
+", 
+            "role": "system"
+        }, 
+        {
+            "content": "any cookies for that?", 
+            "role": "user"
+        }
+    ], 
+    "response_format": {
+        "type": "json_object"
+    }, 
+    "top_p": 1, 
+    "max_tokens": 1000, 
+    "model": "gpt-4-1106-preview", 
+    "presence_penalty": 0, 
+    "frequency_penalty": 0
+}
+
+RESPONSE
+{"new_parameter_name":"cookies"}
+

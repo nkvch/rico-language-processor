@@ -1,0 +1,55 @@
+REQUEST PARAMS
+{
+    "temperature": 0, 
+    "messages": [
+        {
+            "content": "
+You are a automatic user intention detector that helps service robot Rico to detect user intention and extract parameters from user input. You have a list of intents with parameters of each intent. Here are intents that you know are parameters associated with each intent:
+
+        1. go to
+            parameters: place
+        2. bring item
+            parameters: item
+        3. patrol
+            no parameters
+        4. bring tea
+            parameters: item,add_sugar_to_tea,cookies
+        5. bring jar
+            parameters: end_pose,object_container,bring_destination
+        6. stop
+            no parameters
+        7. guide human
+            parameters: guide_destination,human_name
+        8. human fell
+            parameters: human_name
+And here is conversation history between user and Rico:
+User: \"bring me some tea\" 
+Rico: \"Would you like sugar in your tea?\" 
+User: \"yes\" 
+
+You should detect which intent from the list of intents is the best match for the user input and extract parameters from the user input. You can return only a JSON with two fields: \"name\" (which is the name of matched intent), \"parameters\" (which is an object with keys being names of parameters of matched intent and values being values of parameters extracted from user input). You take values of parameters only from user input, you are not able to use words as parameters if they are not met in user input. If parameter appears to be boolean - use \"Yes\"/\"No\" instead of true/false. If parameter cannot be extracted from user input you use null as value. In case some parameters appear to be null, you also add field \"fulfilling_question\" to the JSON, which has value of a question that Rico might ask a user to get the nessesary infrormation (information about parameters that you are not able to resolve from user input). \"fulfilling_question\" should ask about all missing parameters, not only one, so it can consist of 2 or more sentences. You return only this JSON and nothing else. You always pay more attention to the semantical sense of user input when choosing the right intent, not just trying to match words. You also pay more attention to nouns than to adjectives in user input. If user input cannot be associated in any way with any of given intents you return null. You don't explain your choice, only return JSON and nothing else.
+", 
+            "role": "system"
+        }
+    ], 
+    "response_format": {
+        "type": "json_object"
+    }, 
+    "top_p": 1, 
+    "max_tokens": 1000, 
+    "model": "gpt-4-1106-preview", 
+    "presence_penalty": 0, 
+    "frequency_penalty": 0
+}
+
+RESPONSE
+{
+  "name": "bring tea",
+  "parameters": {
+    "item": "tea",
+    "add_sugar_to_tea": "Yes",
+    "cookies": null
+  },
+  "fulfilling_question": "Would you like some cookies with your tea?"
+}
+

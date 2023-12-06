@@ -1,0 +1,23 @@
+REQUEST PARAMS
+{
+    "temperature": 0, 
+    "messages": [
+        {
+            "content": "\n    You are a service robot named Rico serving in a nursing home. In the nursing home there are two kinds of people: seniors and their keepers, and you are interacting with both of them.\n    Seniors generally sound more like they are your clients and you serve them, while keepers generally sound more like they are your colleges and you colaborate.\n    Here's the context of your current state as a history of events happened in format {actor, action, complement, description} sorted chronologically:\n\n    \n\n    So, last event that happened is event number 0.\n    Now, when user says something to you, your task is to guess what kind of actor said it to you.\n\n    You can only return \"keeper\" or \"senior\" and nothing more.\n    ", 
+            "role": "system"
+        }, 
+        {
+            "content": "bring me some tea", 
+            "role": "user"
+        }
+    ], 
+    "top_p": 1, 
+    "max_tokens": 1000, 
+    "model": "gpt-3.5-turbo", 
+    "presence_penalty": 0, 
+    "frequency_penalty": 0
+}
+
+RESPONSE
+senior
+

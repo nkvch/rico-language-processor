@@ -11,6 +11,7 @@ from stories.detect_intent_during_task import get_detect_intent_during_task_syst
 from stories.guess_actor import get_guess_actor_system_story
 from stories.fallback_get_fulfilling_question import fallback_get_fulfulling_question_system_story
 from stories.detect_unexpected_question import detect_unexpected_question_system_story
+from datetime import datetime
 from copy import deepcopy
 
 OPENAI_API_KEY = os.environ['OPENAI_API_KEY']
@@ -140,29 +141,7 @@ class OpenAIInterface:
 
         messages.insert(0, {"role": "system", "content": get_intiate_conv_system_story(history_of_events_string, history_length) })
 
-        print 'REQUEST', messages
-
-        request = urllib2.Request(self.api_url, json.dumps({
-            "model": "gpt-4-1106-preview",
-            "messages": messages,
-            "max_tokens": 1000,
-            "temperature": 0,
-            "top_p": 1,
-            "frequency_penalty": 0,
-            "presence_penalty": 0
-        }), headers={"Authorization": "Bearer " + OPENAI_API_KEY, "Content-Type": "application/json"})
-
-        completion = urllib2.urlopen(request).read()
-
-        print "Completion: ", completion
-
-        json_response = json.loads(completion)
-
-        print "JSON response: ", json_response
-
-        response = json_response['choices'][0]['message']['content']
-
-        print("OpenAI response: ", response)
+        response = self.request_gpt("gpt-4-1106-preview", messages)
 
         return response
 
@@ -181,30 +160,7 @@ class OpenAIInterface:
             "content": get_detect_intent_system_story(intents_list_string, conv_history_string)
         }]
 
-        print 'REQUEST', messages
-
-        request = urllib2.Request(self.api_url, json.dumps({
-            "model": "gpt-4-1106-preview",
-            "response_format": { "type": "json_object" },
-            "messages": messages,
-            "max_tokens": 1000,
-            "temperature": 0,
-            "top_p": 1,
-            "frequency_penalty": 0,
-            "presence_penalty": 0
-        }), headers={"Authorization": "Bearer " + OPENAI_API_KEY, "Content-Type": "application/json"})
-
-        completion = urllib2.urlopen(request).read()
-
-        print "Completion: ", completion
-
-        json_response = json.loads(completion)
-
-        print "JSON response: ", json_response
-
-        response = json_response['choices'][0]['message']['content']
-
-        print("OpenAI response: ", response)
+        response = self.request_gpt("gpt-4-1106-preview", messages, force_json=True)
 
         response_dict = None
 
@@ -285,29 +241,11 @@ class OpenAIInterface:
         print "History events: ", history_events_string
         print "Last user message: ", last_user_message
 
-        request = urllib2.Request(self.api_url, json.dumps({
-            "model": "gpt-4-1106-preview",
-            "messages": [
-                {"role": "system", "content": get_detect_intent_during_task_system_story(history_events_string, intents_list_string, last_user_message, curr_task_params_string, curr_actor) }
-            ],
-            "max_tokens": 1000,
-            "temperature": 0,
-            "top_p": 1,
-            "frequency_penalty": 0,
-            "presence_penalty": 0
-        }), headers={"Authorization": "Bearer " + OPENAI_API_KEY, "Content-Type": "application/json"})
+        messages = [
+            {"role": "system", "content": get_detect_intent_during_task_system_story(history_events_string, intents_list_string, last_user_message, curr_task_params_string, curr_actor) },
+        ]
 
-        completion = urllib2.urlopen(request).read()
-
-        print "Completion: ", completion
-
-        json_response = json.loads(completion)
-
-        print "JSON response: ", json_response
-
-        response = json_response['choices'][0]['message']['content']
-
-        print("OpenAI response: ", response)
+        response = self.request_gpt("gpt-4-1106-preview", messages)
 
         intents_names = list(map(lambda intent: intent['name'], intents_with_description))
 
@@ -337,30 +275,7 @@ class OpenAIInterface:
             {"role": "user", "content": last_user_message }
         ]
 
-        print 'REQUEST', messages
-
-        request = urllib2.Request(self.api_url, json.dumps({
-            "model": "gpt-4-1106-preview",
-            "response_format": { "type": "json_object" },
-            "messages": messages,
-            "max_tokens": 1000,
-            "temperature": 0,
-            "top_p": 1,
-            "frequency_penalty": 0,
-            "presence_penalty": 0
-        }), headers={"Authorization": "Bearer " + OPENAI_API_KEY, "Content-Type": "application/json"})
-
-        completion = urllib2.urlopen(request).read()
-
-        print "Completion: ", completion
-
-        json_response = json.loads(completion)
-
-        print "JSON response: ", json_response
-
-        response = json_response['choices'][0]['message']['content']
-
-        print("OpenAI response: ", response)
+        response = self.request_gpt("gpt-4-1106-preview", messages, force_json=True)
 
         response_dict = None
 
@@ -409,30 +324,12 @@ class OpenAIInterface:
 
         number_of_events = len(history_events)
 
-        request = urllib2.Request(self.api_url, json.dumps({
-            "model": "gpt-3.5-turbo",
-            "messages": [
-                {"role": "system", "content": get_guess_actor_system_story(history_events_string, number_of_events) },
-                {"role": "user", "content": last_user_message }
-            ],
-            "max_tokens": 1000,
-            "temperature": 0,
-            "top_p": 1,
-            "frequency_penalty": 0,
-            "presence_penalty": 0
-        }), headers={"Authorization": "Bearer " + OPENAI_API_KEY, "Content-Type": "application/json"})
+        messages = [
+            {"role": "system", "content": get_guess_actor_system_story(history_events_string, number_of_events) },
+            {"role": "user", "content": last_user_message }
+        ]
 
-        completion = urllib2.urlopen(request).read()
-
-        print "Completion: ", completion
-
-        json_response = json.loads(completion)
-
-        print "JSON response: ", json_response
-
-        response = json_response['choices'][0]['message']['content']
-
-        print("OpenAI response: ", response)
+        response = self.request_gpt("gpt-3.5-turbo", messages)
 
         lowercased_response = response.lower()
 
@@ -451,17 +348,27 @@ class OpenAIInterface:
             {"role": "system", "content": fallback_get_fulfulling_question_system_story(curr_intent, unretrieved_parameters_string) }
         ]
 
+        response = self.request_gpt("gpt-3.5-turbo", messages)
+
+        return response
+    
+    def request_gpt(self, model, messages, force_json=False):
         print 'REQUEST', messages
 
-        request = urllib2.Request(self.api_url, json.dumps({
-            "model": "gpt-3.5-turbo",
+        req_params = {
+            "model": model,
             "messages": messages,
             "max_tokens": 1000,
             "temperature": 0,
             "top_p": 1,
             "frequency_penalty": 0,
-            "presence_penalty": 0
-        }), headers={"Authorization": "Bearer " + OPENAI_API_KEY, "Content-Type": "application/json"})
+            "presence_penalty": 0,
+        }
+
+        if force_json:
+            req_params['response_format'] = { "type": "json_object" }
+
+        request = urllib2.Request(self.api_url, json.dumps(req_params), headers={"Authorization": "Bearer " + OPENAI_API_KEY, "Content-Type": "application/json"})
 
         completion = urllib2.urlopen(request).read()
 
@@ -475,4 +382,25 @@ class OpenAIInterface:
 
         print("OpenAI response: ", response)
 
+        self.log_request(req_params, response)
+
         return response
+
+    def log_request(self, req_params, response_content):
+        log_folder = os.path.normpath(os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), '..', 'logs'))
+        if not os.path.exists(log_folder):
+            os.makedirs(log_folder)
+        log_filename = "{}_{:%Y%m%d_%H%M%S}.log".format(req_params['model'], datetime.now())
+
+        with open(os.path.join(log_folder, log_filename), 'w') as f:
+            f.write("REQUEST PARAMS\n")
+            json_string = json.dumps(req_params, indent=4)
+            json_string = json_string.replace("\\n", "\n")
+            f.write(json_string)
+            f.write("\n\n")
+            f.write("RESPONSE\n")
+            f.write(response_content)
+            f.write("\n\n")
+        
+        print("Logged request to {}".format(log_filename))
